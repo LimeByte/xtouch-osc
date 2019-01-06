@@ -13,6 +13,10 @@ repositories {
 
 dependencies {
     compile(kotlin("stdlib-jdk8"))
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.1.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.1.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-ui:1.1.0")
+    implementation("com.illposed.osc:javaosc-core:0.4")
 }
 
 tasks.withType<KotlinCompile> {
