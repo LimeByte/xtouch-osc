@@ -16,6 +16,7 @@ import me.limebyte.xtouchosc.util.getTransmitterOrNull
 import me.limebyte.xtouchosc.util.loadFxml
 import java.net.InetAddress
 import javax.sound.midi.*
+import kotlin.math.roundToInt
 
 
 class Main : Application() {
@@ -66,18 +67,26 @@ class Main : Application() {
 
         server = OSCPortOut(InetAddress.getLocalHost(), 7000)
 
-        slider.valueProperty().addListener { observable, oldValue, newValue ->
-            val packet = OSCMessage("/composition/layers/5/video/opacity", listOf(newValue.toFloat()))
-            server.send(packet)
-        }
+//        slider.valueProperty().addListener { observable, oldValue, newValue ->
+//            val packet = OSCMessage("/composition/layers/5/video/opacity", listOf(newValue.toFloat()))
+//            server.send(packet)
+//        }
 
         connectXTouch()
 
         xTouchExtender?.let { xTouchExtender ->
             xTouchExtender.sliders.values.forEach {
                 it.setScribbleTop("Hello ${it.id}")
-                it.setScribbleBottom("Labels ")
-                it.testVolume()
+                it.setSlider(value = 1f)
+            }
+
+            xTouchExtender.drawDisplay()
+
+            slider.valueProperty().addListener { _, _, newValue ->
+                xTouchExtender.sliders.values.forEach {
+                    it.setSlider(value = newValue.toFloat())
+                }
+                xTouchExtender.drawDisplay()
             }
 
             client?.addListener("/composition/layers/?/name") { time, message ->

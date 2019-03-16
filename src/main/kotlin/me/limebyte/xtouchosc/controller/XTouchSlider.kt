@@ -1,55 +1,71 @@
 package me.limebyte.xtouchosc.controller
 
-import java.lang.IllegalArgumentException
 import javax.sound.midi.MidiMessage
 import javax.sound.midi.ShortMessage
-import javax.sound.midi.SysexMessage
+import kotlin.math.roundToInt
 
 
 class XTouchSlider(
     val id: Int,
-    private val totalSliders: Int,
     private val sendMessage: (MidiMessage) -> Unit
 ) {
 
+    var scribbleTextTop = ""
+        private set
+
+    var scribbleTextBottom = ""
+        private set
+
     companion object {
-        private const val CHARACTERS_PER_SCRIBBLE = 7
-        private val updateScribbleHeader = byteArrayOf(0x00, 0x00, 0x66, 0x15, 0x12)
+        const val CHARACTERS_PER_SCRIBBLE = 7
     }
 
-    fun setScribbleTop(text: String) = updateLabel(text = text, row = 0)
-    fun setScribbleBottom(text: String) = updateLabel(text = text, row = 1)
+    fun setScribbleTop(text: String, textAlign: Alignment = Alignment.LEFT) = updateLabel(text = text, row = 0, textAlign = textAlign)
+    fun setScribbleBottom(text: String, textAlign: Alignment = Alignment.LEFT) = updateLabel(text = text, row = 1, textAlign = textAlign)
 
     fun clearScribble() {
-        setScribbleTop(text = "")
-        setScribbleBottom(text = "")
+        updateLabel(text = "", row = 0, textAlign = Alignment.LEFT)
+        updateLabel(text = "", row = 1, textAlign = Alignment.LEFT)
     }
 
-    fun testVolume() = sendVolumeChange(0x70, 0x7f)
+    fun setSlider(value: Float) {
+        setSliderPosition(value = value)
+    }
 
-    private fun updateLabel(text: String, row: Int) {
-        if (text.length == CHARACTERS_PER_SCRIBBLE) {
-            val rowOffset = row * totalSliders
-            val position = (id + rowOffset) * CHARACTERS_PER_SCRIBBLE
-            sendSysex(message = byteArrayOf(*updateScribbleHeader, position.toByte(), *text.toByteArray()))
-        } else {
-            throw IllegalArgumentException("Title must be exactly $CHARACTERS_PER_SCRIBBLE characters.")
+    private fun updateLabel(text: String, row: Int, textAlign: Alignment) {
+        val correctLength = text.take(CHARACTERS_PER_SCRIBBLE)
+
+        val paddedText = when (textAlign) {
+            Alignment.LEFT -> correctLength.padEnd(CHARACTERS_PER_SCRIBBLE)
+            Alignment.RIGHT -> correctLength.padStart(CHARACTERS_PER_SCRIBBLE)
+        }
+
+        when (row) {
+            0 -> scribbleTextTop = paddedText
+            1 -> scribbleTextBottom = paddedText
         }
     }
 
-    private fun sendVolumeChange(data1: Int, data2: Int) {
+    /**
+     * Sets the slider position.
+     *
+     * @param value 0 to 15748
+     */
+    private fun setSliderPosition(value: Float) {
+        val intValue = (value * 16383).roundToInt()
+        val course = intValue / 129
+        val fine = intValue % 128
+
+        setScribbleTop(text = course.toString(), textAlign = Alignment.RIGHT)
+        setScribbleBottom(text = fine.toString(), textAlign = Alignment.RIGHT)
+
         val message = ShortMessage()
-        message.setMessage(ShortMessage.PITCH_BEND, id, data1, data2)
+        message.setMessage(ShortMessage.PITCH_BEND, id, fine, course)
         sendMessage(message)
     }
 
-    private fun sendSysex(message: ByteArray) {
-        val prefix = 0xf0.toByte()
-        val suffix = 0xf7.toByte()
-        val appendedMessage = byteArrayOf(prefix, *message, suffix)
-
-        val sysMsg = SysexMessage()
-        sysMsg.setMessage(appendedMessage, appendedMessage.size)
-        sendMessage(sysMsg)
+    enum class Alignment {
+        LEFT, RIGHT
     }
+
 }

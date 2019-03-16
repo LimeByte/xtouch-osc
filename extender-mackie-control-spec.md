@@ -1,6 +1,6 @@
 # X-Touch Extender Sysex Specification
 
-### Name
+### Name (Sysex)
 
 **Variables**
 
@@ -48,21 +48,27 @@ F0 00 00 66 15 12 62 54 65 73 74 20 20 3f F7
 F0 00 00 66 15 12 69 54 65 73 74 20 20 40 F7
 ```
 
-### Volume
+### Volume (Pitch Bend)
+
+Volume is set using the "Pitch Bend" MIDI message.
+The channel corresponds to the strip to adjust.
+
+The value is set from 0 to 16,000 using the course and fine bytes.
 
 **Variables**
 
 Strip ID - `E0` to `E7`
 
-Volume - `00 00` to `70 7F`
+Fine - `00` to `7C`
+Course - `00` to `7F`
 
 **Usage**
 
-`F0 <strip-id> <volume> F7`
+`<strip-id> <fine> <course>`
 
 **Examples**
 
-`E0 00 00` (Min)
+`E0 00 00` (Strip 1 Min)
 
-`E0 70 7F` (Max)
+`E0 7C 7F` (Strip 1 Max)
 
