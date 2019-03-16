@@ -10,24 +10,21 @@ import javafx.scene.control.ProgressBar
 import javafx.scene.control.Slider
 import javafx.scene.layout.AnchorPane
 import javafx.stage.Stage
+import me.limebyte.xtouchosc.controller.XTouchExtender
 import me.limebyte.xtouchosc.util.getReceiverOrNull
 import me.limebyte.xtouchosc.util.getTransmitterOrNull
 import me.limebyte.xtouchosc.util.loadFxml
 import java.net.InetAddress
 import javax.sound.midi.*
-import javax.sound.midi.SysexMessage
-
-
 
 
 class Main : Application() {
 
-    private lateinit var client: OSCPortIn
+    private var client: OSCPortIn? = null
     private lateinit var server: OSCPortOut
-    private val openDevices = mutableListOf<MidiDevice>()
 
-    private var transmitter: Transmitter? = null
-    private var receiver: Receiver? = null
+    private var xTouchExtender: XTouchExtender? = null
+    private val connectedDevices = mutableListOf<MidiDevice>()
 
     companion object {
         fun main(args: Array<String>) {
@@ -56,8 +53,8 @@ class Main : Application() {
         slider.max = 1.0
 
         // Use "//" for all messages
-        client = OSCPortIn(7001)
-        client.addListener("/composition/layers/5/video/opacity") { time, message ->
+        // TODO client = OSCPortIn(7001)
+        client?.addListener("/composition/layers/5/video/opacity") { time, message ->
             println("[$time] ${message.address} ${message.arguments}")
 
             val opacity = message.arguments.firstOrNull() as? Float
@@ -65,7 +62,7 @@ class Main : Application() {
                 progress.progress = it.toDouble()
             }
         }
-        client.startListening()
+        client?.startListening()
 
         server = OSCPortOut(InetAddress.getLocalHost(), 7000)
 
@@ -76,67 +73,89 @@ class Main : Application() {
 
         connectXTouch()
 
-        for (i in 1..8) {
-            updateLabel(title = "Top    ", column = i, row = 1)
-            updateLabel(title = "Bottom ", column = i, row = 2)
-        }
-    }
+        xTouchExtender?.let { xTouchExtender ->
+            xTouchExtender.sliders.values.forEach {
+                it.setScribbleTop("Hello ${it.id}")
+                it.setScribbleBottom("Labels ")
+                it.testVolume()
+            }
 
-    private fun connectXTouch() {
-        val devices = MidiSystem.getMidiDeviceInfo().filter { it.name == "X-Touch-Ext" }
-        devices.forEach {
-            println("${it.name} - ${it.description}")
-
-            try {
-                val device = MidiSystem.getMidiDevice(it)
-
-                if (this.transmitter == null) {
-                    device.getTransmitterOrNull()?.let { transmitter ->
-                        device.open()
-                        openDevices.add(device)
-                        this.transmitter = transmitter
-                    }
-                } else if (this.receiver == null) {
-                    device.getReceiverOrNull()?.let { receiver ->
-                        device.open()
-                        openDevices.add(device)
-                        this.receiver = receiver
-                    }
-                }
-            } catch (exception: MidiUnavailableException) {
-                exception.printStackTrace()
+            client?.addListener("/composition/layers/?/name") { time, message ->
+                val name = message.arguments.first().toString()
+                println("${message.address} $name")
+                // TODO updateLabel(column = 1, row = 1, title = name)
             }
         }
     }
 
-    private fun updateLabel(column: Int = 5, row: Int = 2, title: String = "Quest  ") {
-        val prefix = 0xf0.toByte()
-        val header = byteArrayOf(0x00, 0x00, 0x66, 0x15, 0x12)
-        val suffix = 0xf7.toByte()
+    private fun connectXTouch() = findTransmitterAndReceiver(name = "X-Touch-Ext")
 
-        val charactersPerStrip = 7
-        val totalColumns = 8
-        val rowOffset = (row - 1) * totalColumns
-        val position = (column - 1 + rowOffset) * charactersPerStrip
+    private fun findTransmitter(devices: List<MidiDevice.Info>): Pair<MidiDevice, Transmitter>? {
+        devices.forEach { info ->
+            try {
+                val device = MidiSystem.getMidiDevice(info)
 
-        val label = title.toByteArray()
+                device.getTransmitterOrNull()?.let {
+                    return Pair(device, it)
+                }
 
-        val message = byteArrayOf(prefix, *header, position.toByte(), *label, suffix)
+            } catch (exception: MidiUnavailableException) {
+                exception.printStackTrace()
+            }
+        }
 
-        val sysMsg = SysexMessage()
-        sysMsg.setMessage(message, message.size)
+        return null
+    }
 
-        receiver?.send(sysMsg, -1)
+    private fun findReceiver(devices: List<MidiDevice.Info>): Pair<MidiDevice, Receiver>? {
+        devices.forEach { info ->
+            try {
+                val device = MidiSystem.getMidiDevice(info)
+
+                device.getReceiverOrNull()?.let {
+                    return Pair(device, it)
+                }
+
+            } catch (exception: MidiUnavailableException) {
+                exception.printStackTrace()
+            }
+        }
+
+        return null
+    }
+
+    private fun findTransmitterAndReceiver(name: String) {
+        val devices = MidiSystem.getMidiDeviceInfo().filter { it.name == name }
+        val transmitterPair = findTransmitter(devices = devices)
+        val receiverPair = findReceiver(devices = devices)
+
+        if (transmitterPair == null || receiverPair == null) {
+            println("Unable to connect to X-Touch")
+        } else {
+            val (transmitterDevice, transmitter) = transmitterPair
+            val (receiverDevice, receiver) = receiverPair
+
+            transmitterDevice.open()
+            receiverDevice.open()
+
+            connectedDevices.add(transmitterDevice)
+            connectedDevices.add(receiverDevice)
+
+            xTouchExtender = XTouchExtender(
+                transmitter = transmitter,
+                receiver = receiver
+            )
+        }
     }
 
     override fun stop() {
         super.stop()
-        client.stopListening()
+        client?.stopListening()
 
-        openDevices.forEach {
+        connectedDevices.forEach {
             it.close()
         }
 
-        openDevices.clear()
+        connectedDevices.clear()
     }
 }
